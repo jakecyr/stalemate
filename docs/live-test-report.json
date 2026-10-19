@@ -1,0 +1,86 @@
+{
+  "started": "20261019T124823Z",
+  "checks": [
+    {
+      "check": "Exact dependency and consumed API discovered from actual Codex-generated code",
+      "passed": true
+    },
+    {
+      "check": "Real OpenAI extraction and 512-dimensional embeddings persisted locally",
+      "passed": true
+    },
+    {
+      "check": "Replay of completed sessions makes zero additional model calls",
+      "passed": true
+    },
+    {
+      "check": "Unused library API change creates no false alert",
+      "passed": true
+    },
+    {
+      "check": "Breaking provider change alerts the real consumer; its actual test fails as predicted",
+      "passed": true
+    },
+    {
+      "check": "Resumed consumer receives the actionable impact in task context",
+      "passed": true
+    },
+    {
+      "check": "Versioned assumption invalidation triggers real GPT-6.1 Sol assessment",
+      "passed": true
+    },
+    {
+      "check": "Actual Codex repairs an isolated worktree and passes tests without modifying the original project",
+      "passed": true
+    },
+    {
+      "check": "PR publication remains off",
+      "passed": true
+    },
+    {
+      "check": "Native Codex session is captured incrementally from its real home transcript",
+      "passed": true
+    },
+    {
+      "check": "Real Codex notify hook creates and processes a durable trigger",
+      "passed": true
+    },
+    {
+      "check": "A real Codex subprocess connects to MCP and retrieves the consumer's open impact",
+      "passed": true
+    },
+    {
+      "check": "Real daemon serves the dashboard and API; HTTP acknowledgement persists",
+      "passed": true
+    },
+    {
+      "check": "Acknowledgement persists and removes the alert from open work",
+      "passed": true
+    }
+  ],
+  "models": {
+    "extraction_model": "gpt-6-luna",
+    "reasoning_model": "gpt-6.1-sol",
+    "embedding_model": "text-embedding-3-small"
+  },
+  "api_usage": {
+    "spent_usd": 0.0043613,
+    "reserved_usd": 0,
+    "calls": 24,
+    "input_tokens": 7698,
+    "output_tokens": 3517
+  },
+  "native_notify_events": 1,
+  "checks_passed": 14,
+  "finished": "2026-10-19T12:50:55.676660+00:00",
+  "codex_version": "codex-cli 0.163.0",
+  "notes": [
+    "Codex subprocesses use existing CLI authentication; subscription usage is separate from API ledger.",
+    "No Slack message sent; no PR published; fixture worktrees retained for inspection."
+  ],
+  "all_iterations_api_usage": {
+    "spent_usd": 0.016801120000000003,
+    "reserved_usd": 0.0,
+    "calls": 85
+  }
+}

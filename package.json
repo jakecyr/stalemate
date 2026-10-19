@@ -1,0 +1,10 @@
+{
+  "name": "stalemate-dashboard-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test scripts/dashboard.test.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

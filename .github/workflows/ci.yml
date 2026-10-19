@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: stalemate_test
+          POSTGRES_USER: stalemate
+          POSTGRES_PASSWORD: fixture-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stalemate -d stalemate_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      STALEMATE_TEST_POSTGRES: postgres://stalemate:fixture-password@localhost:5432/stalemate_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make check
+      - run: make build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test

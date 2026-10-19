@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.meb
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+/bin/
+/.stalemate/
+/stalemate.json
+/coverage.out
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
