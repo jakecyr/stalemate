@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jakecyr/stalemate/internal/domain"
@@ -109,5 +110,45 @@ func TestSymlinksAndSecretFilesNeverEnterSnapshot(t *testing.T) {
 	}
 	if s.APIs["example.com/library.APIKey"] != "=\"[REDACTED]\"" {
 		t.Fatal("exported credential not redacted", s.APIs)
+	}
+}
+
+func TestManifestSymlinkCannotReadOutsideRegisteredRoot(t *testing.T) {
+	p := t.TempDir()
+	if _, err := Git(context.Background(), p, "init"); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("unknown-private-value"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(p, "go.mod")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Build(context.Background(), p, privacy.New(nil))
+	if err == nil || strings.Contains(err.Error(), "unknown-private-value") {
+		t.Fatal("manifest symlink crossed disclosure boundary", err)
+	}
+}
+
+func TestTrackedDirectoryReplacedBySymlinkDoesNotEscapeRoot(t *testing.T) {
+	p := fixture(t, "package library\nfunc Fine() {}\n")
+	put(t, p, "nested/source.go", "package nested\nfunc Existing() {}\n")
+	if _, err := Git(context.Background(), p, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(p, "nested")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	put(t, outside, "source.go", "this outside content must not be parsed")
+	if err := os.Symlink(outside, filepath.Join(p, "nested")); err != nil {
+		t.Fatal(err)
+	}
+	s := snap(t, p)
+	for _, file := range s.Files {
+		if strings.HasPrefix(file, "nested/") {
+			t.Fatal("tracked parent symlink escaped root")
+		}
 	}
 }

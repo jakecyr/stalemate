@@ -47,6 +47,8 @@ Memories store the embedding model **and** dimensionality namespace, preventing 
 
 Transcript admission requires a registered canonical project boundary. Capture uses complete newline-terminated records, a metadata fingerprint and byte cursor; truncation or replacement restarts the source. Evidence and extraction jobs commit with cursor advancement, and competing pollers compare committed cursor state. Identical evidence/job IDs deduplicate replays. A turn's final assistant message remains evidence of what the agent said, not a verified feature or test outcome.
 
+Repository roots are canonicalized, manifests must be regular bounded files, and resolved file paths must stay inside that root. Symlinked manifests and indexed files beneath a directory later replaced by an external symlink cannot import outside content into a snapshot.
+
 Jobs use pending/running/done/failed states, available times, leased ownership, renewals, exponential retry and terminal failure after five attempts. A recovered lease cannot be completed by its prior owner. Deterministic impact IDs and a transactional notification outbox prevent replayed changes from creating duplicate alerts. Delivery can repeat after a crash; receivers must use `Idempotency-Key`.
 
 Scans have a cross-process lease. One temporarily malformed/unavailable repository keeps its previous snapshot and edges while other projects continue to be processed. Capture and workers log failures and retain evidence for retry. Graph traversals stop at cycles and enforce depth/size limits. Exceeding a bound returns an error and rolls back incomplete propagation rather than silently returning a partial impact set.

@@ -51,7 +51,12 @@ func Canonical(path string) (string, error) {
 
 func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot, error) {
 	s := domain.Snapshot{APIs: map[string]string{}, Bodies: map[string]string{}, Dependencies: []domain.Dependency{}, Files: []string{}}
-	_, err := Git(ctx, path, "rev-parse", "--show-toplevel")
+	canonical, err := Canonical(path)
+	if err != nil {
+		return s, err
+	}
+	path = canonical
+	_, err = Git(ctx, path, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return s, errors.New("project must be a Git repository")
 	}
@@ -78,10 +83,10 @@ func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot
 	importFiles := map[string][]string{}
 	replaces := map[string]string{}
 	requires := map[string]string{}
-	if b, e := os.ReadFile(filepath.Join(path, "go.mod")); e == nil {
+	if b, e := readManifest(path, "go.mod"); e == nil {
 		m, e := modfile.Parse("go.mod", b, nil)
 		if e != nil {
-			return s, fmt.Errorf("go.mod: %w", e)
+			return s, fmt.Errorf("go.mod: %s", f.Text(e.Error()))
 		}
 		if m.Module != nil {
 			s.Module = m.Module.Mod.Path
@@ -100,13 +105,15 @@ func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot
 				}
 			}
 		}
+	} else if !errors.Is(e, os.ErrNotExist) {
+		return s, e
 	}
 	var manifest struct {
 		Name            string            `json:"name"`
 		Dependencies    map[string]string `json:"dependencies"`
 		DevDependencies map[string]string `json:"devDependencies"`
 	}
-	if b, e := os.ReadFile(filepath.Join(path, "package.json")); e == nil {
+	if b, e := readManifest(path, "package.json"); e == nil {
 		if e = json.Unmarshal(b, &manifest); e != nil {
 			return s, fmt.Errorf("package.json: %w", e)
 		}
@@ -119,6 +126,8 @@ func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot
 				s.Dependencies = append(s.Dependencies, nodeDep(path, name, v))
 			}
 		}
+	} else if !errors.Is(e, os.ErrNotExist) {
+		return s, e
 	}
 	seen := map[string]bool{}
 	for _, rel := range paths {
@@ -141,6 +150,13 @@ func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot
 			return s, e
 		}
 		if !info.Mode().IsRegular() {
+			continue
+		}
+		resolved, e := filepath.EvalSymlinks(full)
+		if e != nil {
+			return s, e
+		}
+		if !privacy.Within(path, resolved) {
 			continue
 		}
 		if info.Size() > 2<<20 {
@@ -241,6 +257,17 @@ func Build(ctx context.Context, path string, f *privacy.Filter) (domain.Snapshot
 		}
 	}
 	return s, nil
+}
+func readManifest(root, name string) ([]byte, error) {
+	path := filepath.Join(root, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > 2<<20 {
+		return nil, fmt.Errorf("%s must be a regular file of at most 2 MiB", name)
+	}
+	return os.ReadFile(path)
 }
 func moduleMatch(imp, mod string) bool { return imp == mod || strings.HasPrefix(imp, mod+"/") }
 func nodeDep(root, name, v string) domain.Dependency {
