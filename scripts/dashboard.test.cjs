@@ -41,6 +41,7 @@ test('dashboard renders real API state and supports search and project form', as
   let stderr = '';
   child.stderr.on('data', b => { stderr += b; });
   let dom;
+  let pendingAction;
   try {
     const base = `http://127.0.0.1:${port}`;
     await waitFor(async () => {
@@ -63,8 +64,15 @@ test('dashboard renders real API state and supports search and project form', as
     console.on('jsdomError', error => errors.push(error));
     dom = new JSDOM(html, {
       url: base, runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: console,
-      beforeParse(window) { window.fetch = (path, options) => fetch(new URL(path, base), options); },
+      beforeParse(window) {
+        window.fetch = (path, options) => fetch(new URL(path, base), options);
+        // Explicit actions exercise refresh; background polling is unnecessary
+        // here and would race teardown of the simulated browser.
+        window.setInterval = () => 0;
+      },
     });
+    const action = dom.window.action;
+    dom.window.action = fn => (pendingAction = action(fn));
     const doc = dom.window.document;
     await waitFor(() => doc.getElementById('live').textContent === 'Connected');
     assert.equal(doc.getElementById('project-count').textContent, '1');
@@ -80,8 +88,12 @@ test('dashboard renders real API state and supports search and project form', as
     assert.equal(doc.getElementById('add-form').classList.contains('hidden'), false);
     assert.equal(doc.getElementById('cloud').checked, false);
     assert.equal(doc.querySelectorAll('script[src]').length, 0);
+    await pendingAction;
     assert.deepEqual(errors, []);
   } finally {
+    // Search renders its results before action's subsequent refresh finishes.
+    // Drain that action before destroying document and stopping the server.
+    await pendingAction;
     dom?.window.close();
     if (child.exitCode === null) {
       const closed = new Promise(resolve => child.once('exit', resolve));

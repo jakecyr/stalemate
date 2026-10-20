@@ -4,31 +4,78 @@ Stalemate is a local engineering memory service for independent coding agents. I
 
 The service includes a Go CLI and daemon, SQLite storage, local vector search, an explicit dependency graph, OpenAI extraction and conditional reasoning, a dashboard, a JSON API, MCP tools, and optional Codex remediation in isolated Git worktrees. PostgreSQL is also supported through the same persistence layer.
 
-## Start
+## Install
 
-Requires Go 1.25.3 or newer, Git, and an authenticated Codex CLI for agent execution. Go's automatic toolchain selection downloads the pinned toolchain when necessary. OpenAI is optional for passive capture and static analysis.
+macOS or Linux, Intel/AMD or ARM64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jakecyr/stalemate/master/install.sh | sh
+```
+
+The installer downloads the latest prebuilt release, verifies its SHA-256 checksum, installs to `~/.local/bin`, checks Git (and installs it through a supported package manager if missing), creates private user settings, and starts the dashboard at **http://127.0.0.1:7433**. Open a new terminal to use `stalemate`. No Go, Node, database server, or model download is required. Git installation may ask for administrator access. On macOS without Git or Homebrew, install Apple's command line tools using `xcode-select --install`, then rerun.
+
+SQLite and vector search are embedded. Cloud processing and automatic repair are disabled by default. To enable OpenAI, run:
+
+```sh
+stalemate setup --openai
+```
+
+This reads an existing `OPENAI_API_KEY` or prompts without echo, saves it in a private user environment file, and restarts the service. Project-level cloud consent is also required. Defaults select GPT-6 Luna for extraction, GPT-6.1 Sol for conditional reasoning, and `text-embedding-3-small` (512 dimensions). Models, endpoints, prices, and budget remain configurable.
+
+```sh
+stalemate project add /absolute/path/to/library
+stalemate project add /absolute/path/to/application
+# Add --cloud when registering a project to permit model calls.
+stalemate doctor
+stalemate status
+stalemate stop
+stalemate start
+```
+
+Codex is optional for passive capture and static analysis; an authenticated Codex CLI is required for `stalemate run` and automated repairs. `gh` is needed only for PR publishing. `doctor` reports required and optional tools separately.
+
+Rerun the installation command to upgrade; settings and data are preserved and the running service is restarted. To pin a release or prepare without starting:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jakecyr/stalemate/master/install.sh | sh -s -- --version v0.1.0 --no-start
+```
+
+Other installer options: `--install-dir DIR`, `--listen HOST:PORT`, `--no-path` (do not update the shell profile), `--no-deps` (do not install Git), and `--openai`. Download and review `install.sh` first if preferred. Windows AMD64 ZIPs are available in [Releases](https://github.com/jakecyr/stalemate/releases); use `setup --no-start`, then `serve` in the foreground. Background lifecycle commands currently support macOS/Linux.
+
+Settings live at `~/Library/Application Support/stalemate/config.json` on macOS or `$XDG_CONFIG_HOME/stalemate/config.json` (normally `~/.config/stalemate/config.json`) on Linux. Secrets live in the adjacent `environment` file (0600). Data defaults to `~/.local/share/stalemate`. `STALEMATE_CONFIG_DIR` and `STALEMATE_DATA_DIR` override these locations. A project's `stalemate.json` takes precedence over user settings; explicit `--config`/`STALEMATE_CONFIG` wins. Run `stalemate start` after a reboot; for boot-time operation use a service manager or Docker's restart policy.
+
+Omit `--cloud` to keep a project's processing local. Local capture stores redacted evidence and performs static dependency analysis; summaries use an explicitly labeled local excerpt and search uses text matching. Re-registering the same path with or without `--cloud` changes disclosure permission. Only registered canonical project paths are admitted. Stalemate does not import unrelated historical conversations or scan arbitrary home directories for code.
+
+## Docker
+
+```sh
+docker run -d --name stalemate --restart unless-stopped \
+  -p 127.0.0.1:7433:7433 -v stalemate-data:/data \
+  ghcr.io/jakecyr/stalemate:latest
+docker exec stalemate cat /data/api-token
+```
+
+Open **http://127.0.0.1:7433** and enter the generated API token in the dashboard. The token and SQLite ledger survive container replacement. The service runs as UID 10001 after initializing the volume. No cloud calls occur by default.
+
+Alternatively, download [compose.yaml](compose.yaml) and run `docker compose up -d`. Mount repositories and Codex sessions at their original absolute paths to capture host work; see [Docker operations](docs/operations.md#docker-deployment) for permissions, custom settings, secrets, PostgreSQL, and offline image archives. Container images support Linux AMD64/ARM64. GitHub may initially make a new GHCR package private; release archives provide a public `docker load` fallback, and maintainers can set the package's visibility to public once.
+
+## Build from source
+
+Requires Go 1.25.3 or newer and Git. Node is used only for dashboard tests.
 
 ```sh
 make build
-# Put OPENAI_API_KEY in .env, or export it in your shell. Never commit it.
-./bin/stalemate init
-./bin/stalemate project add --cloud /absolute/path/to/library
-./bin/stalemate project add --cloud /absolute/path/to/application
-./bin/stalemate serve
+./bin/stalemate setup
 ```
 
-Open **http://127.0.0.1:7433**. `init` creates an ignored `stalemate.json`, enables OpenAI if the key is present, and selects GPT-6 Luna for extraction, GPT-6.1 Sol for conditional reasoning, and `text-embedding-3-small` with 512 dimensions. API keys remain in the environment. Model IDs, endpoints, prices, dimensions, limits, and secrets' environment variable names are configurable.
-
-Omit `--cloud` to keep a project's processing local. Local capture still stores redacted evidence and performs static dependency analysis; summaries use an explicitly labeled local excerpt and search uses text matching. Re-registering the same path with or without `--cloud` changes its disclosure setting. The daemon reads that setting before each job.
-
-Only registered project paths and their subdirectories are admitted. Stalemate reads session headers to determine project membership; it does not import all your historical conversations or scan arbitrary home directories for code.
+Use `./bin/stalemate` in place of `stalemate` below, or add `bin` to PATH. `init` remains available for a project-local `stalemate.json`; installed `setup` uses persistent user settings.
 
 ## Use with Codex
 
 The most reliable integration is the wrapper. It retrieves current context, injects open alerts, runs the actual CLI, records redacted JSONL evidence, and processes the result even without a daemon:
 
 ```sh
-./bin/stalemate run --project /absolute/path/to/application -- \
+stalemate run --project /absolute/path/to/application -- \
   'Implement the new token integration and run its tests'
 ```
 
@@ -39,7 +86,7 @@ For normal Codex sessions, the daemon polls `$CODEX_HOME/sessions` and `archived
 For a cheap event trigger and MCP setup:
 
 ```sh
-./bin/stalemate --config /absolute/path/stalemate.json \
+stalemate --config /absolute/path/stalemate.json \
   --env-file /absolute/path/.env integrations
 ```
 

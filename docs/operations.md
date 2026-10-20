@@ -1,21 +1,52 @@
 # Operations
 
-## Run persistently
+## Installed service
 
-Build with `make build`, generate configuration with `init`, and use absolute paths for your executable, configuration and environment file in a service manager:
+The one-command installer needs curl, tar, SHA-256 tooling (`sha256sum` or `shasum`) and standard Unix tools. It installs a prebuilt binary and checks Git; supported package managers install missing Git. No external SQLite/vector database or Go toolchain is needed. `stalemate doctor` distinguishes required Git from optional Codex and `gh`. It does not authenticate those CLIs or install subscriptions.
+
+`setup` creates user settings independently of the working directory. It defaults to local-only processing even when an OpenAI key happens to be in the environment. `setup --openai` explicitly enables the provider and privately stores its key. Existing config is preserved on subsequent installs. `setup --listen 127.0.0.1:7434` changes ports and restarts an owned service. Port conflicts fail without stopping unrelated processes.
+
+`start`, `stop`, `restart`, and `status` manage a detached process on macOS/Linux. A file lock serializes lifecycle changes; a private PID/instance record and authenticated status response identify the owned process before signalling it. Startup waits for readiness. Logs append to `data_dir/logs/service.log`; rotate them according to your retention policy. This process survives terminal closure but does not restart after a reboot or crash. Run `start` after login, use Docker's restart policy, or configure a service manager below. Windows uses foreground `serve`.
+
+Configuration precedence: explicit `--config`, then `STALEMATE_CONFIG`, then working-directory `stalemate.json`, then installed user `config.json`, then built-in defaults. A config loads its adjacent `environment` file when present; otherwise the working-directory `.env` is used for compatibility. `--env-file` always overrides that selection. Existing environment values take precedence. `setup` targets user settings unless `--config`/`STALEMATE_CONFIG` selects another file.
+
+Relative data, Codex-home and SQLite paths resolve against the configuration's directory. `~/` is expanded. Secrets should use configured environment variable names rather than literal JSON. Changing settings requires restarting. Stop the service before changing its data directory or switching databases.
+
+The installer adds `~/.local/bin` (or the chosen install directory) to the current shell's startup profile unless `--no-path` is used. It never edits `~/.codex/config.toml` or agent instructions. `integrations` prints reviewable Codex settings. Preserve an existing notifier by explicitly chaining it. Polling and the wrapper work independently of hook delivery.
+
+For boot-time operation, use a per-user launchd agent on macOS or a user systemd service on Linux with absolute executable/config/environment paths:
 
 ```sh
-/absolute/path/bin/stalemate --config /absolute/path/stalemate.json \
-  --env-file /absolute/path/.env serve
+/absolute/path/stalemate --config /absolute/path/config.json \
+  --env-file /absolute/path/environment serve
 ```
 
-Use a per-user launchd agent on macOS or a user systemd service on Linux. Run under the same account that owns the repositories and Codex authentication. Direct stderr to your service manager's log. Startup immediately polls eligible transcripts and scans projects; a separate worker processes queued jobs. SIGINT/SIGTERM stops capture, cancels subprocesses/model requests, and drains HTTP shutdown with bounded waits. Do not run as root.
+Run under the account that owns the repositories and Codex authentication. Let the service manager own `serve`; do not combine that manager with `start`/`stop`. SIGINT/SIGTERM cancels capture, workers, subprocesses and model requests, and drains HTTP shutdown with bounded waits.
 
-The generated config contains absolute default paths. The CLI's default `.env` lookup is relative to its working directory, so service managers should pass `--env-file`. Existing process environment values override the file. Database credentials should use `database.dsn_env` rather than literal JSON; the same applies to model/API and webhook signing keys.
+To uninstall: `stalemate stop`, remove the installed binary and the line marked `# stalemate installer` in your shell profile. User settings and data are retained; delete those directories separately only when you intend to discard evidence.
 
-Relative data, Codex-home and SQLite paths in a configuration file resolve against that file's directory. `~/` is expanded. PostgreSQL requires an explicit DSN or DSN environment variable.
+## Docker deployment
 
-No installer edits `~/.codex/config.toml`, agent instructions or shell startup files. `integrations` prints reviewable settings. Global notify configuration can conflict with an existing notifier: preserve it with an explicit chain. The transcript fallback does not depend on hook delivery. The wrapper works synchronously even when the daemon is stopped.
+The image includes Git, CA certificates, SQLite and the dashboard. It initializes the volume root, drops to UID/GID 10001, and executes the Go service directly. `/data` is persistent; do not recursively chown mounted source repositories. Compose publishes only on loopback, requires a generated persistent API token, uses an init process and restarts unless stopped. For remote deployment use TLS and authenticated reverse-proxy controls.
+
+```sh
+docker compose up -d
+docker compose exec stalemate cat /data/api-token
+```
+
+Supply `STALEMATE_API_TOKEN`/`STALEMATE_API_TOKEN_FILE` to choose a token, or use the generated `/data/api-token`. Enter it in the dashboard; do not place it in a URL. Mount custom JSON read-only and set `STALEMATE_CONFIG` to its container path. Docker secret files are supported through `OPENAI_API_KEY_FILE`. An empty token secret is rejected. Compose defaults to disabled AI; set `STALEMATE_AI_PROVIDER=openai` and provide `OPENAI_API_KEY` to opt in, then register individual projects with cloud consent. A plain `docker run -e OPENAI_API_KEY` also enables the provider unless explicitly disabled.
+
+For host capture, bind mount repositories at the **same absolute paths** found in Codex transcripts, and mount sessions read-only. For example, add `/home/alice/code:/home/alice/code:ro` and `/home/alice/.codex/sessions:/capture/sessions:ro`, then set `STALEMATE_CODEX_HOME=/capture`. Optionally mount `archived_sessions` similarly. Prefer mounting only session directories rather than the entire Codex home, which can contain credentials. Files must be readable by UID 10001; on Linux use appropriate group/ACL permissions. Git also checks repository ownership: either run with `--user "$(id -u):$(id -g)"` and a bind-mounted data directory owned by that user, or explicitly configure Git safe-directory entries for the specific trusted registered roots. Do not disable ownership checks globally. Static scanning works with read-only repositories. Agent remediation needs writable worktrees, a separately installed/authenticated Codex CLI, build tools and an appropriate user identity; the default image is a capture/API deployment, with automation off.
+
+Environment overrides: `STALEMATE_DATA_DIR`, `STALEMATE_LISTEN`, `STALEMATE_CODEX_HOME`, `STALEMATE_DATABASE_DRIVER`, `STALEMATE_DATABASE_URL`, `STALEMATE_AI_PROVIDER`, `STALEMATE_AI_BASE_URL`, `STALEMATE_EXTRACTION_MODEL`, `STALEMATE_REASONING_MODEL`, `STALEMATE_EMBEDDING_MODEL`, `STALEMATE_BUDGET_USD`. JSON handles all other settings. To use remote PostgreSQL, set driver `postgres` and supply its DSN via `STALEMATE_DATABASE_URL`; no database server is bundled or provisioned. Switching drivers selects a separate ledger and does not migrate data.
+
+For a local image build: `docker build -t stalemate:local .`, then set `STALEMATE_IMAGE=stalemate:local` for Compose. Published GHCR packages may require a one-time maintainer visibility change to public. Public release assets also contain `stalemate_docker_linux_amd64.tar.gz` and `stalemate_docker_linux_arm64.tar.gz`. Download the archive for your host and `checksums.txt` from the same release, verify its SHA-256, then `docker load -i ARCHIVE`. Set `STALEMATE_IMAGE=ghcr.io/jakecyr/stalemate:vX.Y.Z` to the loaded version and use `docker compose up -d --pull never`. These archives support offline deployments without registry credentials.
+
+## Release automation
+
+A successful push-to-master CI run triggers the serialized Release workflow. Pull requests cannot publish. Binaries are built for macOS/Linux AMD64/ARM64 and Windows AMD64 with embedded version/commit/date and no CGO runtime. Docker images target Linux AMD64/ARM64. Release artifacts include checksums and offline Docker images; a release remains a draft until assets are uploaded. Reruns preserve already published release assets.
+
+Versioning uses conventional commits since the latest published stable release: `fix`, `perf` and `revert` increment patch; `feat` increments minor; `!` or a `BREAKING CHANGE:` footer increments major. Other types produce no release on their own. The largest bump wins; an initial feature release is `v0.1.0`. This repository does not yet have a stable 1.x API. Tags and release notes are generated by CI, with `contents:write` and `packages:write` scoped to publishing jobs. A manual Release run on master can retry a failed publication. Maintainers must make the GHCR package public in its settings after its first publication if GitHub defaults it to private.
 
 ## Inspect and recover
 

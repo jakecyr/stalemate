@@ -43,6 +43,12 @@ The dashboard has a functional DOM test against its own real isolated Go daemon.
 
 GitHub Actions runs the Go race suite with a disposable PostgreSQL 17 service, builds the application, and runs the dashboard test on Node 22. See [CI results](https://github.com/jakecyr/stalemate/actions). Local Docker was unavailable, so PostgreSQL verification is supplied by CI rather than claimed as a local execution.
 
+## Installation and releases
+
+`make check-install` exercises the real compiled binary through an isolated local release mirror, without provider calls. It covers checksums and failed upgrades, absent Git diagnostics, shell profile quoting/idempotence, private secrets and custom configuration discovery, default local-only settings, readiness, background start/stop, a running upgrade, port changes and unrelated port ownership. Conventional-release tests cover initial/minor/patch/breaking versions, ignored drafts/prereleases, non-releasable commits, older workflow retries and shell-like commit text treated as data. Workflow syntax is checked with actionlint. Windows AMD64 cross-compilation and ZIP packaging were also exercised locally.
+
+CI additionally builds the actual Docker image and runs its health/authentication/non-root/volume/restart smoke test. Release automation builds all five binary targets and both Linux container targets before publishing. Paid cross-project agent tests are separate from installation tests and are not run on each release.
+
 ## Scope
 
 This validates a local Codex-first service, Go API impact analysis, npm manifest exposure, SQLite persistence, configured model calls, and isolated repair. Claude remains a future source adapter. Real Slack delivery and real external draft PR creation were intentionally not enabled; their webhook/Git/CLI boundaries are tested locally. Multi-tenant authorization, distributed repository execution and ANN vector indexing remain enterprise extensions, as described in [architecture](architecture.md).

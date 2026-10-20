@@ -1,0 +1,16 @@
+services:
+  stalemate:
+    image: ${STALEMATE_IMAGE:-ghcr.io/jakecyr/stalemate:latest}
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7433:7433"
+    volumes:
+      - stalemate-data:/data
+    # Optional AI: put OPENAI_API_KEY in an untracked .env or export it.
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      STALEMATE_AI_PROVIDER: ${STALEMATE_AI_PROVIDER:-disabled}
+      STALEMATE_BUDGET_USD: ${STALEMATE_BUDGET_USD:-20}
+volumes:
+  stalemate-data:

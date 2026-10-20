@@ -2,11 +2,10 @@ module github.com/jakecyr/stalemate
 
 go 1.25.3
 
-toolchain go1.22.5
-
 require (
 	github.com/jackc/pgx/v5 v5.7.2
 	golang.org/x/mod v0.22.0
+	golang.org/x/term v0.27.0
 	modernc.org/sqlite v1.34.5
 )
 

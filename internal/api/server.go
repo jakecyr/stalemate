@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jakecyr/stalemate/internal/buildinfo"
 	"github.com/jakecyr/stalemate/internal/domain"
 	"github.com/jakecyr/stalemate/internal/service"
 	"github.com/jakecyr/stalemate/internal/store"
@@ -125,7 +126,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	case path == "status" && r.Method == "GET":
 		var usage store.Usage
 		usage, err = svc.Store.Usage(ctx)
-		result = map[string]any{"usage": usage, "budget_usd": svc.Config.AI.BudgetUSD, "provider": svc.Config.AI.Provider, "embedding_model": svc.AI.EmbeddingModel(), "extraction_model": svc.Config.AI.ExtractionModel, "automation": svc.Config.Automation.Mode, "publish_pr": svc.Config.Automation.PublishPR}
+		result = map[string]any{"usage": usage, "budget_usd": svc.Config.AI.BudgetUSD, "provider": svc.Config.AI.Provider, "embedding_model": svc.AI.EmbeddingModel(), "extraction_model": svc.Config.AI.ExtractionModel, "automation": svc.Config.Automation.Mode, "publish_pr": svc.Config.Automation.PublishPR, "version": buildinfo.Version, "process_pid": os.Getpid(), "process_instance": os.Getenv("STALEMATE_INSTANCE")}
 	case path == "projects" && r.Method == "GET":
 		result, err = svc.Store.Projects(ctx)
 	case path == "projects" && r.Method == "POST":

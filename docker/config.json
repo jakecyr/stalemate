@@ -1,0 +1,4 @@
+{
+  "data_dir": "/data",
+  "http": {"listen": "0.0.0.0:7433", "token_env": "STALEMATE_API_TOKEN"}
+}

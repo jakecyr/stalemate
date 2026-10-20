@@ -68,3 +68,42 @@ func TestUnknownFieldsAndTrailingObjectsAreRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestDeploymentOverridesPrecedePathAndDSNResolution(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	os.WriteFile(path, []byte(`{}`), 0600)
+	t.Setenv("STALEMATE_CODEX_HOME", "sessions")
+	t.Setenv("STALEMATE_DATABASE_DRIVER", "postgres")
+	t.Setenv("STALEMATE_DATABASE_URL", "")
+	if _, err := Load(path); err == nil {
+		t.Fatal("postgres silently inherited a SQLite DSN")
+	}
+	t.Setenv("STALEMATE_DATABASE_URL", "postgres://localhost/test")
+	c, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Capture.CodexHome != filepath.Join(dir, "sessions") || c.Database.DSN != "postgres://localhost/test" {
+		t.Fatal("incorrect override resolution", c.Capture.CodexHome)
+	}
+}
+
+func TestConfigDiscoveryPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("STALEMATE_CONFIG_DIR", dir)
+	t.Setenv("STALEMATE_CONFIG", "deployment.json")
+	if path, _ := Discover("explicit.json"); path != "explicit.json" {
+		t.Fatal(path)
+	}
+	if path, _ := Discover(""); path != "deployment.json" {
+		t.Fatal(path)
+	}
+	t.Setenv("STALEMATE_CONFIG", "")
+	// Tests run from the package directory, with no project configuration.
+	path := filepath.Join(dir, "config.json")
+	os.WriteFile(path, []byte(`{}`), 0600)
+	if actual, err := Discover(""); err != nil || actual != path {
+		t.Fatal(actual, err)
+	}
+}

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -117,6 +119,16 @@ func Load(path string) (Config, error) {
 	if v := os.Getenv("STALEMATE_DATA_DIR"); v != "" {
 		c.DataDir = v
 	}
+	for key, target := range map[string]*string{
+		"STALEMATE_LISTEN": &c.HTTP.Listen, "STALEMATE_CODEX_HOME": &c.Capture.CodexHome,
+		"STALEMATE_DATABASE_DRIVER": &c.Database.Driver, "STALEMATE_AI_PROVIDER": &c.AI.Provider,
+		"STALEMATE_AI_BASE_URL": &c.AI.BaseURL, "STALEMATE_EXTRACTION_MODEL": &c.AI.ExtractionModel,
+		"STALEMATE_REASONING_MODEL": &c.AI.ReasoningModel, "STALEMATE_EMBEDDING_MODEL": &c.AI.EmbeddingModel,
+	} {
+		if v := os.Getenv(key); v != "" {
+			*target = v
+		}
+	}
 	resolve := func(p string) string {
 		if strings.HasPrefix(p, "~/") {
 			home, _ := os.UserHomeDir()
@@ -143,6 +155,13 @@ func Load(path string) (Config, error) {
 	}
 	if c.Database.Driver == "sqlite" && c.Database.DSN != ":memory:" && !strings.HasPrefix(c.Database.DSN, "file:") {
 		c.Database.DSN = resolve(c.Database.DSN)
+	}
+	if v := os.Getenv("STALEMATE_BUDGET_USD"); v != "" {
+		n, e := strconv.ParseFloat(v, 64)
+		if e != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return c, errors.New("invalid STALEMATE_BUDGET_USD")
+		}
+		c.AI.BudgetUSD = n
 	}
 	return c, c.Validate()
 }

@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+.meb
+.stalemate
+stalemate.json
+bin
+node_modules
+**/__pycache__
+**/*.pyc
+dist
+*.sqlite*
+*.db*
+coverage.out

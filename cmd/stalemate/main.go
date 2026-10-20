@@ -19,9 +19,11 @@ import (
 	"github.com/jakecyr/stalemate/internal/ai"
 	"github.com/jakecyr/stalemate/internal/api"
 	"github.com/jakecyr/stalemate/internal/automation"
+	"github.com/jakecyr/stalemate/internal/buildinfo"
 	"github.com/jakecyr/stalemate/internal/capture"
 	"github.com/jakecyr/stalemate/internal/config"
 	"github.com/jakecyr/stalemate/internal/domain"
+	"github.com/jakecyr/stalemate/internal/install"
 	"github.com/jakecyr/stalemate/internal/mcp"
 	"github.com/jakecyr/stalemate/internal/notify"
 	"github.com/jakecyr/stalemate/internal/privacy"
@@ -34,6 +36,10 @@ const help = `Stalemate — engineering memory and dependency impact service
 
 Usage: stalemate [--config FILE] [--env-file FILE] COMMAND [OPTIONS]
 
+  setup [--openai] [--no-start] Prepare persistent defaults and start locally
+  start / stop / restart       Manage the installed background service
+  status                       Show the installed service's status
+  doctor [--json]               Check required and optional dependencies
   init                         Write a configuration (never stores API keys)
   serve                        Run capture, workers, API and dashboard
   project add [--cloud] PATH    Register an explicit capture boundary
@@ -53,8 +59,8 @@ Usage: stalemate [--config FILE] [--env-file FILE] COMMAND [OPTIONS]
   mcp                          Serve MCP tools over stdio
   version                      Print version
 
-Global flags must precede the command. .env is loaded from the working directory
-if present; --env-file selects an explicit file. Existing environment wins.
+Global flags must precede the command. Project settings override installed user
+settings; --config and --env-file select explicit files. Existing environment wins.
 `
 
 func main() {
@@ -79,7 +85,8 @@ func flags(name string) *flag.FlagSet {
 func run(ctx context.Context, args []string, out io.Writer) error {
 	global := flags("stalemate")
 	configPath := global.String("config", "", "Configuration JSON file")
-	envFile := global.String("env-file", ".env", "Environment file")
+	envFile := global.String("env-file", "", "Environment file (automatic for installed settings)")
+	versionFlag := global.Bool("version", false, "Print version")
 	if err := global.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(out, help)
@@ -88,16 +95,40 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	args = global.Args()
+	if *versionFlag {
+		fmt.Fprintf(out, "stalemate %s (%s, %s)\n", buildinfo.Version, buildinfo.Commit, buildinfo.Date)
+		return nil
+	}
 	if len(args) == 0 {
 		fmt.Fprint(out, help)
 		return nil
 	}
-	if err := config.LoadEnv(*envFile); err != nil && (!errors.Is(err, os.ErrNotExist) || *envFile != ".env") {
-		return errors.New("could not load environment file")
-	}
 	if args[0] == "version" {
-		fmt.Fprintln(out, "stalemate 0.1.0")
+		fmt.Fprintf(out, "stalemate %s (%s, %s)\n", buildinfo.Version, buildinfo.Commit, buildinfo.Date)
 		return nil
+	}
+	if args[0] == "setup" {
+		return setup(ctx, *configPath, *envFile, args[1:], out)
+	}
+	if args[0] != "init" {
+		var err error
+		*configPath, err = config.Discover(*configPath)
+		if err != nil {
+			return err
+		}
+	}
+	explicitEnv := *envFile != ""
+	if *envFile == "" {
+		*envFile = ".env"
+		if *configPath != "" {
+			adjacent := config.EnvPath(*configPath)
+			if _, err := os.Stat(adjacent); err == nil {
+				*envFile = adjacent
+			}
+		}
+	}
+	if err := config.LoadEnv(*envFile); err != nil && (explicitEnv || !errors.Is(err, os.ErrNotExist)) {
+		return errors.New("could not load environment file")
 	}
 	if args[0] == "init" {
 		c := config.Default()
@@ -122,14 +153,52 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprintln(out, "Configuration written to", path)
 		return nil
 	}
-	if *configPath == "" {
-		if _, err := os.Stat("stalemate.json"); err == nil {
-			*configPath = "stalemate.json"
-		}
-	}
 	c, err := config.Load(*configPath)
 	if err != nil {
 		return err
+	}
+	switch args[0] {
+	case "doctor":
+		f := flags("doctor")
+		asJSON := f.Bool("json", false, "JSON diagnostics")
+		if err = f.Parse(args[1:]); err != nil {
+			return err
+		}
+		checks := install.Doctor(ctx, c)
+		if *asJSON {
+			if err = output(out, checks); err != nil {
+				return err
+			}
+		} else {
+			printChecks(out, checks)
+		}
+		if install.Missing(checks) {
+			return errors.New("required system dependencies are missing")
+		}
+		return nil
+	case "start", "restart":
+		if *configPath == "" {
+			return errors.New("run stalemate setup first")
+		}
+		var state install.State
+		if args[0] == "restart" {
+			state, err = install.Restart(ctx, c, *configPath, *envFile)
+		} else {
+			state, err = install.Start(ctx, c, *configPath, *envFile)
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Stalemate is running:", state.URL)
+		return nil
+	case "stop":
+		return install.Stop(ctx, c)
+	case "status":
+		state, err := install.Status(ctx, c)
+		if err != nil {
+			return err
+		}
+		return output(out, state)
 	}
 	if err = os.MkdirAll(c.DataDir, 0700); err != nil {
 		return err
