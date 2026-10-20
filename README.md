@@ -57,7 +57,7 @@ docker exec stalemate cat /data/api-token
 
 Open **http://127.0.0.1:7433** and enter the generated API token in the dashboard. The token and SQLite ledger survive container replacement. The service runs as UID 10001 after initializing the volume. No cloud calls occur by default.
 
-Alternatively, download [compose.yaml](compose.yaml) and run `docker compose up -d`. Mount repositories and Codex sessions at their original absolute paths to capture host work; see [Docker operations](docs/operations.md#docker-deployment) for permissions, custom settings, secrets, PostgreSQL, and offline image archives. Container images support Linux AMD64/ARM64. GitHub may initially make a new GHCR package private; release archives provide a public `docker load` fallback, and maintainers can set the package's visibility to public once.
+Alternatively, download [compose.yaml](compose.yaml) and run `docker compose up -d`. Mount repositories and Codex sessions at their original absolute paths to capture host work; see [Docker operations](docs/operations.md#docker-deployment) for permissions, custom settings, secrets, PostgreSQL, and offline image archives. Container images support Linux AMD64/ARM64 and can be pulled without registry credentials. Release archives also provide an offline `docker load` option.
 
 ## Build from source
 

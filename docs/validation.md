@@ -49,6 +49,8 @@ GitHub Actions runs the Go race suite with a disposable PostgreSQL 17 service, b
 
 CI additionally builds the actual Docker image and runs its health/authentication/non-root/volume/restart smoke test. Release automation builds all five binary targets and both Linux container targets before publishing. Paid cross-project agent tests are separate from installation tests and are not run on each release.
 
+[Release v0.1.0](https://github.com/jakecyr/stalemate/releases/tag/v0.1.0) was published by the complete release workflow after CI passed. All five binary archives, both container archives, and checksums were generated. The actual public installer was then run on macOS ARM64 with isolated user settings: download/checksum verification, startup, API health, default disabled cloud processing, restart and stop passed. Both public Docker archives passed checksum and embedded-architecture checks, and an anonymous GHCR manifest request confirmed Linux AMD64/ARM64 access. The strengthened [container CI](https://github.com/jakecyr/stalemate/actions/runs/39365499402) also registered a real fixture project and verified its database record survived restart.
+
 ## Scope
 
 This validates a local Codex-first service, Go API impact analysis, npm manifest exposure, SQLite persistence, configured model calls, and isolated repair. Claude remains a future source adapter. Real Slack delivery and real external draft PR creation were intentionally not enabled; their webhook/Git/CLI boundaries are tested locally. Multi-tenant authorization, distributed repository execution and ANN vector indexing remain enterprise extensions, as described in [architecture](architecture.md).
