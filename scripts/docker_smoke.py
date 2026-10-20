@@ -43,6 +43,10 @@ def main():
         status = run("exec", name, "cat", "/proc/1/status")
         assert "Uid:\t10001\t10001\t10001\t10001" in status
         run("restart", name)
+        # Docker may allocate a new host port when restarting a container that
+        # requested an ephemeral published port. Re-discover its endpoint.
+        port = run("port", name, "7433/tcp").split(":")[-1]
+        request = urllib.request.Request("http://127.0.0.1:" + port + "/api/status", headers={"Authorization": "Bearer " + token})
         for _ in range(30):
             try:
                 with urllib.request.urlopen(request, timeout=1) as response:
@@ -55,6 +59,11 @@ def main():
         assert run("exec", name, "cat", "/data/api-token") == token
         assert "stalemate.sqlite" in run("exec", name, "ls", "/data")
         print("Docker smoke test passed: health, auth, non-root process, durable volume, restart")
+    except Exception:
+        # This fixture has no supplied credentials or registered source code.
+        print(run("logs", name))
+        print(run("inspect", "--format", "{{json .State}}", name))
+        raise
     finally:
         subprocess.run(["docker", "rm", "--force", name], stdout=subprocess.DEVNULL, check=False)
         subprocess.run(["docker", "volume", "rm", volume], stdout=subprocess.DEVNULL, check=False)
