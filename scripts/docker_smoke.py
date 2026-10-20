@@ -39,6 +39,13 @@ def main():
         request = urllib.request.Request(url + "/api/status", headers={"Authorization": "Bearer " + token})
         with urllib.request.urlopen(request) as response:
             assert json.load(response)["provider"] == "disabled"
+        run("exec", name, "mkdir", "/data/fixture")
+        run("exec", name, "git", "init", "-b", "master", "/data/fixture")
+        registration = urllib.request.Request(url + "/api/projects", data=json.dumps({
+            "path": "/data/fixture", "name": "Persistent container fixture", "cloud_allowed": False,
+        }).encode(), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(registration) as response:
+            assert response.status == 201
         # PID 1 becomes the unprivileged Go service, with no root supervisor.
         status = run("exec", name, "cat", "/proc/1/status")
         assert "Uid:\t10001\t10001\t10001\t10001" in status
@@ -58,6 +65,9 @@ def main():
             raise AssertionError("Container did not restart")
         assert run("exec", name, "cat", "/data/api-token") == token
         assert "stalemate.sqlite" in run("exec", name, "ls", "/data")
+        projects = urllib.request.Request("http://127.0.0.1:" + port + "/api/projects", headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(projects) as response:
+            assert any(p["name"] == "Persistent container fixture" for p in json.load(response))
         print("Docker smoke test passed: health, auth, non-root process, durable volume, restart")
     except Exception:
         # This fixture has no supplied credentials or registered source code.
