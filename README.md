@@ -48,6 +48,8 @@ Omit `--cloud` to keep a project's processing local. Local capture stores redact
 
 ## Docker
 
+Requires a running Docker Engine or Docker Desktop. The Compose option also requires the Docker Compose plugin.
+
 ```sh
 docker run -d --name stalemate --restart unless-stopped \
   -p 127.0.0.1:7433:7433 -v stalemate-data:/data \
