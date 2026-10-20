@@ -39,8 +39,8 @@ def main():
         request = urllib.request.Request(url + "/api/status", headers={"Authorization": "Bearer " + token})
         with urllib.request.urlopen(request) as response:
             assert json.load(response)["provider"] == "disabled"
-        run("exec", name, "mkdir", "/data/fixture")
-        run("exec", name, "git", "init", "-b", "master", "/data/fixture")
+        run("exec", "--user", "10001:10001", name, "mkdir", "/data/fixture")
+        run("exec", "--user", "10001:10001", name, "git", "init", "-b", "master", "/data/fixture")
         registration = urllib.request.Request(url + "/api/projects", data=json.dumps({
             "path": "/data/fixture", "name": "Persistent container fixture", "cloud_allowed": False,
         }).encode(), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
@@ -69,8 +69,10 @@ def main():
         with urllib.request.urlopen(projects) as response:
             assert any(p["name"] == "Persistent container fixture" for p in json.load(response))
         print("Docker smoke test passed: health, auth, non-root process, durable volume, restart")
-    except Exception:
+    except Exception as error:
         # This fixture has no supplied credentials or registered source code.
+        if isinstance(error, urllib.error.HTTPError):
+            print(error.read().decode())
         print(run("logs", name))
         print(run("inspect", "--format", "{{json .State}}", name))
         raise
